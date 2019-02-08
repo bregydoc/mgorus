@@ -1,56 +1,44 @@
 package mgorus
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/mongodb/mongo-go-driver/bson"
+	"github.com/mongodb/mongo-go-driver/mongo"
 	"github.com/sirupsen/logrus"
-	"gopkg.in/mgo.v2"
-	"gopkg.in/mgo.v2/bson"
 )
 
 type hooker struct {
-	c *mgo.Collection
+	c *mongo.Collection
 }
 
 type M bson.M
 
-func NewHooker(mgoUrl, db, collection string) (*hooker, error) {
-	session, err := mgo.Dial(mgoUrl)
+func NewHooker(url, db, collection string) (*hooker, error) {
+	client, err := mongo.NewClient(url)
 	if err != nil {
 		return nil, err
 	}
 
-	return &hooker{c: session.DB(db).C(collection)}, nil
+	err = client.Connect(context.Background())
+	if err != nil {
+		return nil, err
+	}
+
+	return &hooker{c: client.Database(db).Collection(collection)}, nil
 }
 
-func NewHookerFromCollection(collection *mgo.Collection) *hooker {
+func NewHookerFromCollection(collection *mongo.Collection) *hooker {
 	return &hooker{c: collection}
 }
 
 func NewHookerWithAuth(mgoUrl, db, collection, user, pass string) (*hooker, error) {
-	session, err := mgo.Dial(mgoUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := session.DB(db).Login(user, pass); err != nil {
-		return nil, fmt.Errorf("Failed to login to mongodb: %v", err)
-	}
-
-	return &hooker{c: session.DB(db).C(collection)}, nil
+	panic("unimplemented")
 }
 
-func NewHookerWithAuthDb(mgoUrl, authdb, db, collection, user, pass string) (*hooker, error) {
-	session, err := mgo.Dial(mgoUrl)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := session.DB(authdb).Login(user, pass); err != nil {
-		return nil, fmt.Errorf("Failed to login to mongodb: %v", err)
-	}
-
-	return &hooker{c: session.DB(db).C(collection)}, nil
+func NewHookerWithAuthDb(mgoUrl, authDb, db, collection, user, pass string) (*hooker, error) {
+	panic("unimplemented")
 }
 
 func (h *hooker) Fire(entry *logrus.Entry) error {
@@ -67,10 +55,10 @@ func (h *hooker) Fire(entry *logrus.Entry) error {
 		}
 	}
 
-	mgoErr := h.c.Insert(M(data))
+	_, err := h.c.InsertOne(context.Background(), M(data))
 
-	if mgoErr != nil {
-		return fmt.Errorf("Failed to send log entry to mongodb: %v", mgoErr)
+	if err != nil {
+		return fmt.Errorf("failed to send log entry to mongodb: %v", err)
 	}
 
 	return nil
